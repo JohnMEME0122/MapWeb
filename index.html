@@ -76,6 +76,7 @@
       let directionsService;
       let directionsRenderer;
       let infoWindow;
+      let autocomplete; // 提升到全局作用域
 
       function initMap() {
         map = new google.maps.Map(document.getElementById("map"), {
@@ -92,7 +93,7 @@
           map.setCenter(currentPosition);
           map.setZoom(16);
 
-          const autocomplete = new google.maps.places.Autocomplete(
+          autocomplete = new google.maps.places.Autocomplete(
             document.getElementById("search-input"),
             {
               types: ["restaurant"],
@@ -105,6 +106,7 @@
               strictBounds: false,
             }
           );
+
           autocomplete.addListener("place_changed", function () {
             const place = autocomplete.getPlace();
             selectedRestaurant = {
@@ -171,10 +173,10 @@
 
                   infoWindow.setContent(
                     `<h3>${selectedRestaurant.name}</h3>
-                    <div>地址：${selectedRestaurant.address}</div>
-                    <div>電話：${selectedRestaurant.phoneNumber}</div>
-                    <div>評分：${selectedRestaurant.rating}</div>
-                    <div>步行時間：${response.routes[0].legs[0].duration.text}</div>`
+                <div>地址：${selectedRestaurant.address}</div>
+                <div>電話：${selectedRestaurant.phoneNumber}</div>
+                <div>評分：${selectedRestaurant.rating}</div>
+                <div>步行時間：${response.routes[0].legs[0].duration.text}</div>`
                   );
                   infoWindow.open(map, marker);
                 }
@@ -188,11 +190,11 @@
         JSON.parse(localStorage.getItem("restaurantList")) || [];
       restaurantList.forEach(function (restaurant) {
         document.getElementById("restaurant-list").innerHTML += `
-        <li class="list-group-item">
-          ${restaurant.name}
-          <button class="btn-close float-end remove"></button>
-        </li>
-      `;
+    <li class="list-group-item">
+      ${restaurant.name}
+      <button class="btn-close float-end remove"></button>
+    </li>
+  `;
       });
 
       const colors = [];
@@ -221,6 +223,7 @@
           easing: "Power5.easeInOut",
           callbackFinished: function (segments) {
             document.getElementById("wheel").style.display = "none";
+            wheel.rotationAngle = 0;
             wheel.draw();
             window.alert(segments.text);
 
@@ -229,16 +232,6 @@
             selectedRestaurant = restaurantList.find(function (restaurant) {
               return restaurant.name === segments.text;
             });
-
-            const place = autocomplete.getPlace();
-            selectedRestaurant = {
-              location: place.geometry.location,
-              placeId: place.place_id,
-              name: place.name,
-              address: place.formatted_address,
-              phoneNumber: place.formatted_phone_number,
-              rating: place.rating,
-            };
 
             map.setCenter(selectedRestaurant.location);
 
@@ -261,7 +254,38 @@
             }
 
             directionsRenderer.set("directions", null);
-            calculateAndDisplayRoute();
+
+            if (selectedRestaurant) {
+              directionsService.route(
+                {
+                  origin: new google.maps.LatLng(
+                    currentPosition.lat,
+                    currentPosition.lng
+                  ),
+                  destination: {
+                    placeId: selectedRestaurant.placeId,
+                  },
+                  travelMode: "WALKING",
+                },
+                function (response, status) {
+                  if (status === "OK") {
+                    directionsRenderer.setDirections(response);
+                    if (!infoWindow) {
+                      infoWindow = new google.maps.InfoWindow();
+                    }
+
+                    infoWindow.setContent(
+                      `<h3>${selectedRestaurant.name}</h3>
+                <div>地址：${selectedRestaurant.address}</div>
+                <div>電話：${selectedRestaurant.phoneNumber}</div>
+                <div>評分：${selectedRestaurant.rating}</div>
+                <div>步行時間：${response.routes[0].legs[0].duration.text}</div>`
+                    );
+                    infoWindow.open(map, marker);
+                  }
+                }
+              );
+            }
           },
         },
       });
@@ -269,11 +293,11 @@
       document.getElementById("add").addEventListener("click", function () {
         if (selectedRestaurant) {
           document.getElementById("restaurant-list").innerHTML += `
-          <li class="list-group-item">
-            ${selectedRestaurant.name}
-            <button class="btn-close float-end remove"></button>
-          </li>
-        `;
+      <li class="list-group-item">
+        ${selectedRestaurant.name}
+        <button class="btn-close float-end remove"></button>
+      </li>
+    `;
           const restaurantList =
             JSON.parse(localStorage.getItem("restaurantList")) || [];
           restaurantList.push(selectedRestaurant);
@@ -311,6 +335,7 @@
         wheel.startAnimation();
       });
     </script>
+
     <script>
       document.getElementById("loadMap").addEventListener("click", function () {
         const apiKey = document.getElementById("apiKey").value;
